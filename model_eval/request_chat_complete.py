@@ -6,6 +6,76 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def get_stream_chunks(api_url: str, headers: dict = None, payload: dict = None):
+    """
+    Retrieve stream chunks from an API response.
+    
+    Args:
+        api_url (str): The API endpoint URL
+        headers (dict, optional): HTTP headers for the request
+        payload (dict, optional): Request payload/body
+    
+    Yields:
+        dict: Individual stream chunks
+    """
+
+    # Use streaming mode with requests library
+    with requests.post(api_url,
+                        headers=headers, 
+                        json=payload,
+                        # data=json.dumps(data), 
+                        stream=True) as response:        
+        response.raise_for_status() # Ensure successful response
+
+        response_text = response.text
+        try:
+            data = json.loads(response_text)
+            yield data
+        except json.JSONDecodeError:
+            print(f"Could not parse response: {response_text}")
+
+        # # Iterate through response lines
+        # for line in response.iter_lines():
+        #     print(f"*** Raw line: {line}", flush=True)
+        #     if line:
+        #         # Decode byte string and parse JSON
+        #         try:
+        #             chunk = json.loads(line.decode('utf-8'))
+        #             yield chunk
+        #         except json.JSONDecodeError:
+        #             print(f"Could not parse chunk: {line}")
+
+
+def get_chat_completion_stream(api_url: str, api_key: str, model: str, messages: list, model_params: dict):
+    """
+    Calls the OpenAI Chat Completion API.
+    Args:
+        api_key: Your OpenAI API key.  It is highly recommended to pass this
+                 as an environment variable rather than hardcoding it.
+        model: The name of the model to use (e.g., "gpt-4o").
+        messages: A list of message objects, where each object has "role" and "content" keys.
+    Returns:
+        A dictionary containing the API response, or None if there was an error.
+    """
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {
+        "model": model,
+        "messages": messages,
+        **model_params
+    }
+
+    for chunk in get_stream_chunks(api_url, headers, payload):
+        return chunk
+
+
+
+
+
 def get_chat_completion(api_url: str, api_key: str, model: str, messages: list, model_params: dict) -> dict:
     """
     Calls the OpenAI Chat Completion API.
@@ -22,19 +92,31 @@ def get_chat_completion(api_url: str, api_key: str, model: str, messages: list, 
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
-    data = {
+    # data = {
+    #     "model": model,
+    #     "messages": messages,
+    #     **model_params
+    # }
+
+    payload = {
         "model": model,
         "messages": messages,
         **model_params
     }
-
     try:
-        response = requests.post(api_url, headers=headers, data=json.dumps(data))
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        # response = requests.post(api_url, headers=headers, data=json.dumps(data))
+        with requests.post(api_url, 
+                    headers=headers,
+                    json=payload,
+                    # data=json.dumps(data), 
+                    stream=False) as response:
+            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error calling API: {e}")
         return None
+
+
 
 if __name__ == '__main__':
     # Get the API key from an environment variable.  This is best practice.
@@ -123,6 +205,7 @@ if __name__ == '__main__':
     VIJ
     CMN
     UJI
+    빈칸에 들어갈 값은?
     """
 
 
@@ -131,13 +214,21 @@ if __name__ == '__main__':
         {"role": "user", "content": user_input}
     ]
 
-    # Example usage:
-    chat_response = get_chat_completion(api_url, model_api_key, model_name, messages, model_params)
+    STREAM = True
 
-    if chat_response:
-        print(json.dumps(chat_response, indent=2, ensure_ascii=False)) # Nicely formatted output
+    if STREAM == True:
+        chat_stream_response = get_chat_completion_stream(api_url, model_api_key, model_name, messages, model_params)
+        print(f"Chat stream response ({type(chat_stream_response)}):\n {json.dumps(chat_stream_response, indent=2, ensure_ascii=False)}")
+
     else:
-        print("Failed to get a response from the model API.")
+        # Example usage:
+        chat_response = get_chat_completion(api_url, model_api_key, model_name, messages, model_params)
+
+        if chat_response:
+            # print(json.dumps(chat_response, indent=2, ensure_ascii=False)) # Nicely formatted output
+            print(f"Chat response ({type(chat_response)}):\n {json.dumps(chat_response, indent=2, ensure_ascii=False)}")
+        else:
+            print("Failed to get a response from the model API.")
 
     # output example
     # {
